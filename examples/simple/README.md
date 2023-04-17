@@ -37,6 +37,14 @@ cargo install wasm-server-runner
 cargo run --target wasm32-unknown-unknown
 ```
 
+macOS
+```
+brew install llvm
+LLVM_PATH=$(brew --prefix llvm)
+AR="${LLVM_PATH}/bin/llvm-ar" CC="${LLVM_PATH}/bin/clang" cargo build --target wasm32-unknown-unknown
+```
+
+
 ### Run
 
 - Use a web browser and navigate to <http://127.0.0.1:1334>
