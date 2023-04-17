@@ -14,6 +14,8 @@ use futures_util::select;
 use log::{debug, warn};
 use matchbox_protocol::PeerId;
 use messages::*;
+
+use nostr::prelude::*;
 pub(crate) use socket::MessageLoopChannels;
 pub use socket::{
     BuildablePlurality, ChannelConfig, ChannelPlurality, MultipleChannels, NoChannels, PeerState,
@@ -23,6 +25,7 @@ use std::{collections::HashMap, pin::Pin, time::Duration};
 
 cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
+        use nostr::prelude::*;
         mod wasm;
         type UseMessenger = wasm::WasmMessenger;
         type UseSignaller = wasm::WasmSignaller;
@@ -56,30 +59,88 @@ async fn signaling_loop<S: Signaller>(
     events_sender: futures_channel::mpsc::UnboundedSender<PeerEvent>,
 ) -> Result<(), SignalingError> {
     let mut signaller = S::new(attempts, &room_url).await?;
+    debug!("room {:?}", room_url);
+    //sub to nostr
+    let my_keys: Keys = Keys::generate();
+    debug!("{:?}", my_keys.public_key().to_bech32());
+
+    let subscribe = ClientMessage::new_req(SubscriptionId::new("abcdefgh"), vec![Filter::new()]);
+
+    signaller
+        .send(serde_json::to_string(&subscribe).unwrap())
+        .await
+        .map_err(SignalingError::from)?;
+    debug!(" {:?}", subscribe);
 
     loop {
         select! {
             request = requests_receiver.next().fuse() => {
                 let request = serde_json::to_string(&request).expect("serializing request");
                 debug!("-> {request}");
+                //convert json to nostr json
                 signaller.send(request).await.map_err(SignalingError::from)?;
             }
 
             message = signaller.next_message().fuse() => {
+
                 match message {
+
                     Ok(message) => {
-                        debug!("Received {message}");
-                        let event: PeerEvent = serde_json::from_str(&message)
-                            .unwrap_or_else(|err| panic!("couldn't parse peer event: {err}.\nEvent: {message}"));
-                        events_sender.unbounded_send(event).map_err(SignalingError::from)?;
+                        if let Ok(message) = RelayMessage::from_json(&message) {
+                            match message {
+                                RelayMessage::Event {
+                                    event,
+                                    subscription_id,
+                                } => {
+                                    debug!("event: {:?}", event);
+                                }
+                                                       // let event: PeerEvent = serde_json::from_str(&message)
+                            //     .unwrap_or_else(|err| panic!("couldn't parse peer event: {err}.\nEvent: {message}"));
+                            // events_sender.unbounded_send(event).map_err(SignalingError::from)?;
+
+
+                                RelayMessage::Notice { message } => {
+                                    // Handle the Notice case here
+                                }
+                                RelayMessage::EndOfStoredEvents(subscription_id) => {
+                                    // Handle the EndOfStoredEvents case here
+                                }
+                                RelayMessage::Ok {
+                                    event_id,
+                                    status,
+                                    message,
+                                } => {
+                                    // Handle the Ok case here
+                                }
+                                RelayMessage::Auth { challenge } => {
+                                    // Handle the Auth case here
+                                }
+                                RelayMessage::Count {
+                                    subscription_id,
+                                    count,
+                                } => {
+                                    // Handle the Count case here
+                                }
+                                RelayMessage::Empty => {
+                                    // Handle the Empty case here
+                                }
+                            }
+                        } else {
+                            // Handle parsing errors if any
+                        }
                     }
-                    Err(SignalingError::UnknownFormat) => warn!("ignoring unexpected non-text message from signaling server"),
-                    Err(err) => break Err(err)
+                    Err(SignalingError::UnknownFormat) => {
+                        warn!("ignoring unexpected non-text message from signaling server")
+                    }
+                    Err(err) => {
+                        break Err(err)
+                    }
+
+                    complete => {
+                        break Ok(())
+                    }
                 }
-
             }
-
-            complete => break Ok(())
         }
     }
 }
