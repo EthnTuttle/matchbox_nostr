@@ -62,20 +62,41 @@ async fn signaling_loop<S: Signaller>(
     debug!("room {:?}", room_url);
     //sub to nostr
     let my_keys: Keys = Keys::generate();
-    debug!("{:?}", my_keys.public_key().to_bech32());
+    let npub = my_keys.public_key().to_bech32().unwrap();
+    debug!("{:?}", npub);
+    let tag = "matchbox-nostr";
 
-    let subscribe = ClientMessage::new_req(SubscriptionId::new("abcdefgh"), vec![Filter::new()]);
+    let subscribe = ClientMessage::new_req(
+        SubscriptionId::new(tag),
+        vec![Filter::new().hashtag(tag).since(Timestamp::now())],
+    );
 
     signaller
-        .send(serde_json::to_string(&subscribe).unwrap())
+        .send(subscribe.as_json())
         .await
         .map_err(SignalingError::from)?;
-    debug!(" {:?}", subscribe);
+    debug!("subscribing to {:?}", subscribe);
+
+    let find_game_event = ClientMessage::new_event(
+        EventBuilder::new_text_note(npub, &[Tag::Hashtag(tag.to_string())])
+            .to_event(&my_keys)
+            .unwrap(),
+    );
+
+    signaller
+        .send(find_game_event.as_json())
+        .await
+        .map_err(SignalingError::from)?;
+    debug!("finding game {:?}", find_game_event);
 
     loop {
         select! {
             request = requests_receiver.next().fuse() => {
+
                 let request = serde_json::to_string(&request).expect("serializing request");
+
+                //nostr send
+                //let request = request.unwrap().as_json();
                 debug!("-> {request}");
                 //convert json to nostr json
                 signaller.send(request).await.map_err(SignalingError::from)?;
