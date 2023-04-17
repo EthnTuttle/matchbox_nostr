@@ -1,5 +1,6 @@
 use cfg_if::cfg_if;
 use derive_more::From;
+use nostr::secp256k1::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -7,7 +8,7 @@ use uuid::Uuid;
 #[derive(
     Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, From, Hash, PartialOrd, Ord,
 )]
-pub struct PeerId(pub Uuid);
+pub struct PeerId(pub XOnlyPublicKey);
 
 /// Requests go from peer to signaling server
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]

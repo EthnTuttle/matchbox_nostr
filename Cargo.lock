@@ -3044,6 +3044,7 @@ version = "0.6.0"
 dependencies = [
  "cfg-if",
  "derive_more",
+ "nostr",
  "serde",
  "serde_json",
  "uuid",

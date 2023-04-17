@@ -65,6 +65,8 @@ async fn signaling_loop<S: Signaller>(
     let npub = my_keys.public_key().to_bech32().unwrap();
     debug!("{:?}", npub);
     let tag = "matchbox-nostr";
+    let id = PeerEvent::NewPeer(PeerId(my_keys.public_key()));
+    let id = serde_json::to_string(&id).expect("serializing request");
 
     let subscribe = ClientMessage::new_req(
         SubscriptionId::new(tag),
@@ -78,7 +80,7 @@ async fn signaling_loop<S: Signaller>(
     debug!("subscribing to {:?}", subscribe);
 
     let find_game_event = ClientMessage::new_event(
-        EventBuilder::new_text_note(npub, &[Tag::Hashtag(tag.to_string())])
+        EventBuilder::new_text_note(id, &[Tag::Hashtag(tag.to_string())])
             .to_event(&my_keys)
             .unwrap(),
     );
@@ -111,34 +113,38 @@ async fn signaling_loop<S: Signaller>(
                             match message {
                                 RelayMessage::Event {
                                     event,
-                                    subscription_id,
+                                    subscription_id: _,
                                 } => {
-                                    debug!("event: {:?}", event);
+                                    if event.pubkey == my_keys.public_key() {
+                                       //ignore own events
+                                    } else {
+                                        debug!("event: {:?}", event);
+
+                                        let msg: PeerEvent = serde_json::from_str(&event.content)
+                                        .unwrap_or_else(|err| panic!("couldn't parse peer event: {err}."));
+                                    events_sender.unbounded_send(msg).map_err(SignalingError::from)?;
+                                    }
+
                                 }
-                                                       // let event: PeerEvent = serde_json::from_str(&message)
-                            //     .unwrap_or_else(|err| panic!("couldn't parse peer event: {err}.\nEvent: {message}"));
-                            // events_sender.unbounded_send(event).map_err(SignalingError::from)?;
-
-
-                                RelayMessage::Notice { message } => {
+                                RelayMessage::Notice { message: _ } => {
                                     // Handle the Notice case here
                                 }
-                                RelayMessage::EndOfStoredEvents(subscription_id) => {
+                                RelayMessage::EndOfStoredEvents(_subscription_id ) => {
                                     // Handle the EndOfStoredEvents case here
                                 }
                                 RelayMessage::Ok {
-                                    event_id,
-                                    status,
-                                    message,
+                                    event_id: _,
+                                    status: _,
+                                    message: _,
                                 } => {
                                     // Handle the Ok case here
                                 }
-                                RelayMessage::Auth { challenge } => {
+                                RelayMessage::Auth { challenge: _ } => {
                                     // Handle the Auth case here
                                 }
                                 RelayMessage::Count {
-                                    subscription_id,
-                                    count,
+                                    subscription_id: _,
+                                    count: _,
                                 } => {
                                     // Handle the Count case here
                                 }
