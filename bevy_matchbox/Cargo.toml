@@ -21,6 +21,7 @@ readme = "../README.md"
 
 [features]
 ggrs = ["matchbox_socket/ggrs"]
+nostr = ["matchbox_socket/nostr"]
 
 [dependencies]
 bevy = { version = "0.10", default-features = false }

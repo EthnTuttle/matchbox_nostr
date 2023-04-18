@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_ggrs::{GGRSPlugin, GGRSSchedule, Session};
 use bevy_matchbox::prelude::*;
@@ -70,12 +72,14 @@ fn main() {
 }
 
 fn start_matchbox_socket(mut commands: Commands, args: Res<Args>) {
-    let room_id = match &args.room {
-        Some(id) => id.clone(),
-        None => format!("bevy_ggrs?next={}", &args.players),
-    };
+    // let room_id = match &args.room {
+    //     Some(id) => id.clone(),
+    //     None => format!("bevy_ggrs?next={}", &args.players),
+    // };
 
-    let room_url = format!("{}/{}", &args.matchbox, room_id);
+    // let room_url = format!("{}/{}", &args.matchbox, room_id);
+
+    let room_url = "ws://localhost:8080";
     info!("connecting to matchbox server: {:?}", room_url);
 
     commands.insert_resource(MatchboxSocket::new_ggrs(room_url));
