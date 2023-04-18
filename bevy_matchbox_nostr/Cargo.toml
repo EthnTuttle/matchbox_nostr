@@ -4,6 +4,7 @@ version = "0.6.0"
 authors = [
   "Johan Helsing <johanhelsing@gmail.com>",
   "Garry O'Donnell <garry.euan.odonnell@ntlworld.com",
+  "stu <stutxo@proton.me>",
 ]
 edition = "2021"
 description = "A Bevy extension for Matchbox WebRtc networking"
@@ -15,8 +16,8 @@ categories = [
   "wasm",
   "web-programming",
 ]
-repository = "https://github.com/johanhelsing/matchbox"
-homepage = "https://github.com/johanhelsing/matchbox"
+repository = "https://github.com/stum0/matchbox_nostr"
+homepage = "https://github.com/stum0/matchbox_nostr"
 readme = "../README.md"
 
 [features]

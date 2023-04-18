@@ -1,6 +1,6 @@
 # [![Matchbox](https://raw.githubusercontent.com/johanhelsing/matchbox/main/images/matchbox_logo.png)](https://github.com/johanhelsing/matchbox)
 
-This is a fork of matchbox to test using nostr instead of the matchbox server to matchmake players. 
+This is a fork of matchbox to test using nostr instead of the matchbox server to connect players. 
 
 will need LLVM to compile nostr on mac os 
 
