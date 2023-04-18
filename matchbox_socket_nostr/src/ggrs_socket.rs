@@ -1,10 +1,9 @@
 use std::marker::PhantomData;
 
 use ggrs::{Message, PlayerType};
-use matchbox_protocol::PeerId;
 
 use crate::{
-    ChannelConfig, MessageLoopFuture, MultipleChannels, NoChannels, Packet, SingleChannel,
+    ChannelConfig, MessageLoopFuture, MultipleChannels, NoChannels, Packet, PeerId, SingleChannel,
     WebRtcChannel, WebRtcSocket, WebRtcSocketBuilder,
 };
 

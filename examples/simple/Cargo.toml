@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-matchbox_socket_nostr = { path = "../../matchbox_socket_nostr"}
+matchbox_socket_nostr = { path = "../../matchbox_socket_nostr", features = ["ggrs"]}
 futures-timer = { version = "3", features = ["wasm-bindgen"] }
 log = { version = "0.4", default-features = false }
 
