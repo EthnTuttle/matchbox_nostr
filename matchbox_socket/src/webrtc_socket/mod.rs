@@ -13,9 +13,9 @@ use futures_timer::Delay;
 use futures_util::select;
 use log::{debug, warn};
 use matchbox_protocol::PeerId;
+
 use messages::*;
 
-use nostr::prelude::*;
 pub(crate) use socket::MessageLoopChannels;
 pub use socket::{
     BuildablePlurality, ChannelConfig, ChannelPlurality, MultipleChannels, NoChannels, PeerState,
@@ -52,6 +52,7 @@ trait Signaller: Sized {
     async fn next_message(&mut self) -> Result<String, SignalingError>;
 }
 
+#[cfg(not(feature = "nostr"))]
 async fn signaling_loop<S: Signaller>(
     attempts: Option<u16>,
     room_url: String,
@@ -59,18 +60,61 @@ async fn signaling_loop<S: Signaller>(
     events_sender: futures_channel::mpsc::UnboundedSender<PeerEvent>,
 ) -> Result<(), SignalingError> {
     let mut signaller = S::new(attempts, &room_url).await?;
+
+    loop {
+        select! {
+            request = requests_receiver.next().fuse() => {
+                let request = serde_json::to_string(&request).expect("serializing request");
+                debug!("-> {request}");
+                signaller.send(request).await.map_err(SignalingError::from)?;
+            }
+
+            message = signaller.next_message().fuse() => {
+                match message {
+                    Ok(message) => {
+                        debug!("Received {message}");
+                        let event: PeerEvent = serde_json::from_str(&message)
+                            .unwrap_or_else(|err| panic!("couldn't parse peer event: {err}.\nEvent: {message}"));
+                        events_sender.unbounded_send(event).map_err(SignalingError::from)?;
+                    }
+                    Err(SignalingError::UnknownFormat) => warn!("ignoring unexpected non-text message from signaling server"),
+                    Err(err) => break Err(err)
+                }
+
+            }
+
+            complete => break Ok(())
+        }
+    }
+}
+
+#[cfg(feature = "nostr")]
+async fn signaling_loop<S: Signaller>(
+    attempts: Option<u16>,
+    room_url: String,
+    mut requests_receiver: futures_channel::mpsc::UnboundedReceiver<PeerRequest>,
+    events_sender: futures_channel::mpsc::UnboundedSender<PeerEvent>,
+) -> Result<(), SignalingError> {
+    use nostr::prelude::*;
+
+    let mut signaller = S::new(attempts, &room_url).await?;
     debug!("room {:?}", room_url);
-    //sub to nostr
+
+    //changed for nostr
     let my_keys: Keys = Keys::generate();
-    let npub = my_keys.public_key().to_bech32().unwrap();
+    let npub = my_keys.public_key();
     debug!("{:?}", npub);
     let tag = "matchbox-nostr";
+
     let id = PeerEvent::NewPeer(PeerId(my_keys.public_key()));
     let id = serde_json::to_string(&id).expect("serializing request");
 
     let subscribe = ClientMessage::new_req(
         SubscriptionId::new(tag),
-        vec![Filter::new().hashtag(tag).since(Timestamp::now())],
+        vec![Filter::new()
+            .kind(Kind::TextNote)
+            // .hashtag(tag)
+            .since(Timestamp::now())],
     );
 
     signaller
@@ -94,35 +138,79 @@ async fn signaling_loop<S: Signaller>(
     loop {
         select! {
             request = requests_receiver.next().fuse() => {
+                //changed for nostr
+                if let Some(matchbox_protocol::PeerRequest::Signal { receiver, data }) = request {
+                    let req = PeerEvent::Signal {
+                        sender: receiver,
+                        data,
+                    };
 
-                let request = serde_json::to_string(&request).expect("serializing request");
+                     let request = serde_json::to_string(&req).expect("serializing request");
 
-                //nostr send
-                //let request = request.unwrap().as_json();
-                debug!("-> {request}");
-                //convert json to nostr json
-                signaller.send(request).await.map_err(SignalingError::from)?;
-            }
+                                   let msg = ClientMessage::new_event(
+                                    EventBuilder::new_text_note(request, &[Tag::Hashtag(tag.to_string())])
+                                        .to_event(&my_keys)
+                                        .unwrap(),
+                                );
+                            debug!("encrypted_msg -> {:?}", msg);
+                            signaller.send(msg.as_json()).await.map_err(SignalingError::from)?;
 
-            message = signaller.next_message().fuse() => {
+                } else {
+                 //dont send keepalive for nostr
+                }
+
+
+                    // let encrypted_msg =
+                    // EventBuilder::new_encrypted_direct_msg(&my_keys, *pubkey, request).unwrap()
+                    //     .to_event(&my_keys).unwrap();
+                  //let msg = ClientMessage::new_event(encrypted_msg).as_json();
+
+                //changed for nostr
+
+
+
+
+                }
+
+
+             message = signaller.next_message().fuse() => {
 
                 match message {
 
                     Ok(message) => {
+                        // debug!("event: {:?}", message);
+                        //changed for nostr
                         if let Ok(message) = RelayMessage::from_json(&message) {
+                            // debug!("event test: {:?}", message);
                             match message {
                                 RelayMessage::Event {
                                     event,
                                     subscription_id: _,
                                 } => {
+
                                     if event.pubkey == my_keys.public_key() {
                                        //ignore own events
-                                    } else {
-                                        debug!("event: {:?}", event);
+                                    } else if event.kind == Kind::EncryptedDirectMessage {
+                                        if let Ok(msg) = decrypt(
+                                            &my_keys.secret_key().unwrap(),
+                                            &event.pubkey,
+                                            event.content,
+                                        ) {
 
-                                        let msg: PeerEvent = serde_json::from_str(&event.content)
-                                        .unwrap_or_else(|err| panic!("couldn't parse peer event: {err}."));
-                                    events_sender.unbounded_send(msg).map_err(SignalingError::from)?;
+                                            if let Ok( mb_event ) = serde_json::from_str(&msg) {
+                                               // debug!("event: {:?}", mb_event);
+                                                events_sender.unbounded_send(mb_event).map_err(SignalingError::from)?;
+                                            }
+                                        }
+                                    } else {
+                                        debug!("mb_event: {:?}", event);
+
+
+
+                                            let event: PeerEvent = serde_json::from_str(&event.content).expect("deserializing event");
+                                            events_sender.unbounded_send(event).map_err(SignalingError::from)?;
+
+
                                     }
 
                                 }
@@ -162,11 +250,10 @@ async fn signaling_loop<S: Signaller>(
                     Err(err) => {
                         break Err(err)
                     }
-
-                    complete => {
-                        break Ok(())
-                    }
                 }
+            }
+            complete => {
+                break Ok(())
             }
         }
     }
