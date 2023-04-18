@@ -1,7 +1,7 @@
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use log::info;
-use matchbox_socket::{PeerState, WebRtcSocket};
+use matchbox_socket_nostr::{PeerState, WebRtcSocket};
 use std::time::Duration;
 
 #[cfg(target_arch = "wasm32")]

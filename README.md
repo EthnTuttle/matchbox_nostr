@@ -1,5 +1,15 @@
 # [![Matchbox](https://raw.githubusercontent.com/johanhelsing/matchbox/main/images/matchbox_logo.png)](https://github.com/johanhelsing/matchbox)
 
+This is a fork of matchbox to test using nostr instead of the matchbox server to matchmake players. 
+
+will need LLVM to compile nostr on mac os 
+
+```
+brew install llvm
+LLVM_PATH=$(brew --prefix llvm)
+AR="${LLVM_PATH}/bin/llvm-ar" CC="${LLVM_PATH}/bin/clang" cargo build --target wasm32-unknown-unknown
+```
+
 [![crates.io](https://img.shields.io/crates/v/matchbox_socket.svg)](https://crates.io/crates/matchbox_socket)
 ![MIT/Apache 2.0](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)
 [![crates.io](https://img.shields.io/crates/d/matchbox_socket.svg)](https://crates.io/crates/matchbox_socket)
