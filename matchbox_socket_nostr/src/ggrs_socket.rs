@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use ggrs::{Message, PlayerType};
+use log::{debug, info};
 
 use crate::{
     ChannelConfig, MessageLoopFuture, MultipleChannels, NoChannels, Packet, PeerId, SingleChannel,
@@ -101,6 +102,7 @@ fn deserialize_packet(message: (PeerId, Packet)) -> (PeerId, Message) {
 
 impl ggrs::NonBlockingSocket<PeerId> for WebRtcSocket<SingleChannel> {
     fn send_to(&mut self, msg: &Message, addr: &PeerId) {
+        info!("SENDING TO: {:?}", addr);
         self.send(build_packet(msg), *addr);
     }
     fn receive_all_messages(&mut self) -> Vec<(PeerId, Message)> {

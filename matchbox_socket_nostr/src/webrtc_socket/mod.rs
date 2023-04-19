@@ -12,11 +12,12 @@ use futures::{future::Either, stream::FuturesUnordered, Future, FutureExt, Strea
 use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_timer::Delay;
 use futures_util::select;
-use log::{debug, warn};
+use log::{debug, info, warn};
 pub use matchbox_protocol::PeerId;
 
 use messages::*;
 
+use nostr::Keys;
 pub(crate) use socket::MessageLoopChannels;
 pub use socket::{
     BuildablePlurality, ChannelConfig, ChannelPlurality, MultipleChannels, NoChannels, PeerState,
@@ -59,6 +60,7 @@ async fn signaling_loop<S: Signaller>(
     room_url: String,
     mut requests_receiver: futures_channel::mpsc::UnboundedReceiver<PeerRequest>,
     events_sender: futures_channel::mpsc::UnboundedSender<PeerEvent>,
+    my_keys: Keys,
 ) -> Result<(), SignalingError> {
     use nostr::prelude::*;
 
@@ -66,9 +68,9 @@ async fn signaling_loop<S: Signaller>(
     debug!("room {:?}", room_url);
 
     //changed for nostr
-    let my_keys: Keys = Keys::generate();
-    let npub = my_keys.public_key();
-    debug!("{:?}", npub);
+
+    let key = my_keys.public_key();
+    info!("MY NOSTR KEY{:?}", key);
     let tag = "matchbox-nostr";
 
     let id = PeerEvent::NewPeer(PeerId(my_keys.public_key()));
@@ -104,7 +106,10 @@ async fn signaling_loop<S: Signaller>(
         select! {
             request = requests_receiver.next().fuse() => {
                 //changed for nostr
+
                 if let Some(matchbox_protocol::PeerRequest::Signal { receiver, data }) = request {
+
+
                     let req = PeerEvent::Signal {
                         sender: receiver,
                         data,
@@ -120,6 +125,8 @@ async fn signaling_loop<S: Signaller>(
                             debug!("encrypted_msg -> {:?}", msg);
                             signaller.send(msg.as_json()).await.map_err(SignalingError::from)?;
 
+
+
                 } else {
                  //dont send keepalive for nostr
                 }
@@ -131,10 +138,6 @@ async fn signaling_loop<S: Signaller>(
                   //let msg = ClientMessage::new_event(encrypted_msg).as_json();
 
                 //changed for nostr
-
-
-
-
                 }
 
 
@@ -171,19 +174,39 @@ async fn signaling_loop<S: Signaller>(
                                         debug!("mb_event: {:?}", event);
 
 
-
-                                            let event: PeerEvent = serde_json::from_str(&event.content).expect("deserializing event");
+                                        if let Ok(event) = serde_json::from_str(&event.content) {
                                             events_sender.unbounded_send(event).map_err(SignalingError::from)?;
+                                        }
 
 
                                     }
 
                                 }
                                 RelayMessage::Notice { message: _ } => {
-                                    // Handle the Notice case here
+
+
+
                                 }
                                 RelayMessage::EndOfStoredEvents(_subscription_id ) => {
                                     // Handle the EndOfStoredEvents case here
+                                        //ad nostr pubkey as ID
+                                    let id = PeerEvent::IdAssigned(PeerId(my_keys.public_key()));
+
+                                    events_sender.unbounded_send(id).map_err(SignalingError::from)?;
+                                    let id = PeerEvent::NewPeer(PeerId(my_keys.public_key()));
+                                    let id = serde_json::to_string(&id).expect("serializing request");
+                                    let find_game_event = ClientMessage::new_event(
+                                    EventBuilder::new_text_note(id, &[Tag::Hashtag(tag.to_string())])
+                                    .to_event(&my_keys)
+                                    .unwrap(),
+                                     );
+
+                                    signaller
+                                    .send(find_game_event.as_json())
+                                    .await
+                                    .map_err(SignalingError::from)?;
+
+
                                 }
                                 RelayMessage::Ok {
                                     event_id: _,
@@ -268,6 +291,7 @@ async fn message_loop<M: Messenger>(
     channel_configs: &[ChannelConfig],
     channels: MessageLoopChannels,
     keep_alive_interval: Option<Duration>,
+    my_keys: Keys,
 ) {
     let MessageLoopChannels {
         requests_sender,
@@ -288,6 +312,11 @@ async fn message_loop<M: Messenger>(
         Either::Right(std::future::pending())
     }
     .fuse();
+
+    // if id_tx.try_send(PeerId(my_keys.public_key())).is_err() {
+    // } else {
+    //     println!("id sent successfully");
+    // }
 
     loop {
         let mut next_peer_messages_out = peer_messages_out_rx
@@ -311,9 +340,13 @@ async fn message_loop<M: Messenger>(
                     debug!("{:?}", event);
                     match event {
                         PeerEvent::IdAssigned(peer_uuid) => {
+
+
+
                             id_tx.try_send(peer_uuid.to_owned()).unwrap();
                         },
                         PeerEvent::NewPeer(peer_uuid) => {
+
                             let (signal_tx, signal_rx) = futures_channel::mpsc::unbounded();
                             handshake_signals.insert(peer_uuid, signal_tx);
                             let signal_peer = SignalPeer::new(peer_uuid, requests_sender.clone());
@@ -335,6 +368,8 @@ async fn message_loop<M: Messenger>(
                     }
                 }
             }
+
+
 
             handshake_result = handshakes.select_next_some() => {
                 data_channels.insert(handshake_result.peer_id, handshake_result.data_channels);
