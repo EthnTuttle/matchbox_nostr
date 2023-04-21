@@ -137,7 +137,6 @@ async fn signaling_loop<S: Signaller>(
                     );
                     info!("-> {msg:?}");
                     signaller.send(msg.as_json()).await.map_err(SignalingError::from)?;
-
                 // } else {
                 //  //dont send keepalive for nostr
                 // }
