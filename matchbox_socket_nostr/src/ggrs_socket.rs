@@ -79,7 +79,7 @@ impl WebRtcSocket {
             .chain(std::iter::once(our_id))
             .collect();
         ids.sort();
-
+        info!("CONNECTED PEEEEERS {:?}", ids);
         ids.into_iter()
             .map(|id| {
                 if id == our_id {

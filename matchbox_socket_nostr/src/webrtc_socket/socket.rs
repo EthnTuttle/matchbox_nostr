@@ -11,7 +11,9 @@ use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use log::{debug, error, info};
 use matchbox_protocol::PeerId;
 use nostr::Keys;
+
 use std::{collections::HashMap, marker::PhantomData, pin::Pin, time::Duration};
+use uuid::Uuid;
 
 /// Configuration options for an ICE server connection.
 /// See also: <https://developer.mozilla.org/en-US/docs/Web/API/RTCIceServer#example>
@@ -435,8 +437,7 @@ impl<C: ChannelPlurality> WebRtcSocket<C> {
     /// See also: [`WebRtcSocket::disconnected_peers`]
     pub fn connected_peers(&'_ self) -> impl std::iter::Iterator<Item = PeerId> + '_ {
         self.peers.iter().filter_map(|(id, state)| {
-            if state == &PeerState::Connected && *id != self.id().unwrap() {
-                info!("CONNECTED PEEEEER {:?}", id);
+            if state == &PeerState::Connected {
                 Some(*id)
             } else {
                 None
@@ -612,7 +613,6 @@ async fn run_socket(
     debug!("Starting WebRtcSocket");
 
     let my_keys: Keys = Keys::generate();
-    let my_keys_clone = my_keys.clone();
 
     let (requests_sender, requests_receiver) = futures_channel::mpsc::unbounded::<PeerRequest>();
     let (events_sender, events_receiver) = futures_channel::mpsc::unbounded::<PeerEvent>();
@@ -638,7 +638,6 @@ async fn run_socket(
         &config.channels,
         channels,
         config.keep_alive_interval,
-        my_keys_clone,
     );
 
     let mut message_loop_done = Box::pin(message_loop_fut.fuse());

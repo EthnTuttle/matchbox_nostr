@@ -1,6 +1,7 @@
 use derive_more::From;
 use nostr::secp256k1::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(
     Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, From, Hash, PartialOrd, Ord,
