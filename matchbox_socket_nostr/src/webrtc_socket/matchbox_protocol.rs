@@ -1,12 +1,10 @@
 use derive_more::From;
-use nostr::secp256k1::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(
     Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, From, Hash, PartialOrd, Ord,
 )]
-pub struct PeerId(pub XOnlyPublicKey);
+pub struct PeerId(pub nostr::key::XOnlyPublicKey);
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PeerRequest<S> {

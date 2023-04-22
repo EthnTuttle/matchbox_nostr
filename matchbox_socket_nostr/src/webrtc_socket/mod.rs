@@ -15,9 +15,10 @@ use futures_util::select;
 use log::{debug, info, warn};
 pub use matchbox_protocol::PeerId;
 
+use nostr::secp256k1::Message;
+
 use messages::*;
 
-use nostr::Keys;
 pub(crate) use socket::MessageLoopChannels;
 pub use socket::{
     BuildablePlurality, ChannelConfig, ChannelPlurality, MultipleChannels, NoChannels, PeerState,
@@ -60,28 +61,22 @@ async fn signaling_loop<S: Signaller>(
     room_url: String,
     mut requests_receiver: futures_channel::mpsc::UnboundedReceiver<PeerRequest>,
     events_sender: futures_channel::mpsc::UnboundedSender<PeerEvent>,
-    my_keys: Keys,
+    // my_keys: Keys,
 ) -> Result<(), SignalingError> {
     use nostr::prelude::*;
 
     let mut signaller = S::new(attempts, &room_url).await?;
     debug!("room {:?}", room_url);
 
-    //changed for nostr
+    let key_pair = Keys::generate();
 
-    let key = PeerId(my_keys.public_key());
-    //info!("MY NOSTR KEY{:?}", key);
+    let pub_key = PeerId(key_pair.public_key());
     let tag = "matchbox-nostr";
-
-    //info!("MY ID?{:?}", id);
+    let id = uuid::Uuid::new_v4();
 
     let subscribe = ClientMessage::new_req(
-        SubscriptionId::new(tag),
-        vec![Filter::new()
-            .kind(Kind::TextNote)
-            //.kind(Kind::EncryptedDirectMessage)
-            .hashtag(tag)
-            .since(Timestamp::now())],
+        SubscriptionId::new(id.to_string()),
+        vec![Filter::new().hashtag(tag).since(Timestamp::now())],
     );
 
     signaller
@@ -91,18 +86,18 @@ async fn signaling_loop<S: Signaller>(
     debug!("subscribing to {:?}", subscribe);
 
     //add id and send peer message
-    let assign_id = PeerEvent::IdAssigned(key);
-    info!("ID ASSIGNED{:?}", assign_id);
+    let assign_id = PeerEvent::IdAssigned(pub_key);
+    warn!("{:?}", assign_id);
     events_sender
         .unbounded_send(assign_id)
         .map_err(SignalingError::from)?;
 
-    let new_peer = PeerEvent::NewPeer(key);
+    let new_peer = PeerEvent::NewPeer(pub_key);
     let new_peer = serde_json::to_string(&new_peer).expect("serializing request");
 
     let find_game_event = ClientMessage::new_event(
         EventBuilder::new_text_note(new_peer, &[Tag::Hashtag(tag.to_string())])
-            .to_event(&my_keys)
+            .to_event(&key_pair)
             .unwrap(),
     );
 
@@ -110,120 +105,107 @@ async fn signaling_loop<S: Signaller>(
         .send(find_game_event.as_json())
         .await
         .map_err(SignalingError::from)?;
-    info!("finding game {:?}", find_game_event);
+    warn!("BROADCAST PEER ID {:?}", find_game_event);
 
     loop {
         select! {
             request = requests_receiver.next().fuse() => {
 
+            if let Some(matchbox_protocol::PeerRequest::Signal { receiver, data: _ }) = &request {
 
-                // if let Some(matchbox_protocol::PeerRequest::Signal { receiver, data }) = request {
+                let request = serde_json::to_string(&request).expect("serializing request");
 
+                let created_at = Timestamp::now();
+                let kind = Kind::EncryptedDirectMessage;
 
-                    // let request = serde_json::to_string(&data).expect("serializing request");
-                    let request = serde_json::to_string(&request).expect("serializing request");
+                let tags = vec![Tag::PubKey(receiver.0, None ), Tag::Hashtag(tag.to_string())];
 
-                //                           let encrypted_msg =
-                //     EventBuilder::new_encrypted_direct_msg(&my_keys, receiver.0, request).unwrap()
-                //         .to_event(&my_keys).unwrap();
-                //   let msg = ClientMessage::new_event(encrypted_msg);
-                //                 info!("-> {msg:?}");
-                //             signaller.send(msg.as_json()).await.map_err(SignalingError::from)?;
+                let content =
+                encrypt(&key_pair.secret_key().unwrap(), &receiver.0, request).unwrap();
 
-                    let msg = ClientMessage::new_event(
-                        EventBuilder::new_text_note(request, &[Tag::Hashtag(tag.to_string())])
-                            .to_event(&my_keys)
-                            .unwrap(),
-                    );
-                    info!("-> {msg:?}");
-                    signaller.send(msg.as_json()).await.map_err(SignalingError::from)?;
-                // } else {
-                //  //dont send keepalive for nostr
-                // }
-             }
+                let id = EventId::new(&key_pair.public_key(), created_at, &kind, &tags, &content);
+
+                let id_bytes = id.as_bytes();
+                let sig = Message::from_slice(id_bytes).unwrap();
+
+                let event = Event {
+                    id,
+                    kind,
+                    content,
+                    pubkey: key_pair.public_key(),
+                    created_at,
+                    tags,
+                    sig:  key_pair.sign_schnorr(&sig).unwrap(),
+                };
+
+                // Create a new ClientMessage with the encrypted message
+                let msg = ClientMessage::new_event(event);
+
+                // Log the message being sent
+                warn!("SENDING...{msg:?}");
+
+                // Send the message and handle possible errors
+                signaller.send(msg.as_json()).await.map_err(SignalingError::from)?;
+            }
+        }
 
              message = signaller.next_message().fuse() => {
 
                 match message {
 
                     Ok(message) => {
-                        // debug!("event: {:?}", message);
-                        //changed for nostr
                         if let Ok(message) = RelayMessage::from_json(&message) {
-                            // debug!("event test: {:?}", message);
                             match message {
                                 RelayMessage::Event {
                                     event,
                                     subscription_id: _,
                                 } => {
-
-                                    if event.pubkey == my_keys.public_key() {
+                                    info!("RECEIVED..{event:?}");
+                                    if event.pubkey == key_pair.public_key() {
                                        //ignore own events
                                     } else if event.kind == Kind::EncryptedDirectMessage {
                                         if let Ok(msg) = decrypt(
-                                            &my_keys.secret_key().unwrap(),
+                                            &key_pair.secret_key().unwrap(),
                                             &event.pubkey,
                                             event.content,
                                         ) {
-                                        // let peer_key = event.pubkey;
-                                        // if let Ok(event) = serde_json::from_str::<PeerRequest>(&msg) {
-                                        //     match event {
-
-                                        //         PeerRequest::Signal{receiver: _, data } => {
-                                        //             let event = PeerEvent::Signal {
-                                        //                 sender: PeerId(peer_key),
-                                        //                 data,
-                                        //                 };
-                                        //                 info!("Received {event:?}");
-                                        //             events_sender.unbounded_send(event).map_err(SignalingError::from)?;
-                                        //         }
-                                        //         PeerRequest::KeepAlive => {}
-                                        //      }
-                                        // }
-                                        }
-                                    } else {
                                         let peer_key = event.pubkey;
-                                        if let Ok(event) = serde_json::from_str::<PeerRequest>(&event.content) {
+                                        if let Ok(event) = serde_json::from_str::<PeerRequest>(&msg) {
                                             match event {
-
                                                 PeerRequest::Signal{receiver: _, data } => {
                                                     let event = PeerEvent::Signal {
                                                         sender: PeerId(peer_key),
                                                         data,
                                                         };
-                                                        info!("Received {event:?}");
                                                     events_sender.unbounded_send(event).map_err(SignalingError::from)?;
                                                 }
                                                 PeerRequest::KeepAlive => {}
                                              }
-                                        } else if let Ok(new_peer) = serde_json::from_str::<PeerEvent>(&event.content) {
-
-                                            events_sender.unbounded_send(new_peer).map_err(SignalingError::from)?;
                                         }
+                                        }
+                                    } else if let Ok(new_peer) = serde_json::from_str::<PeerEvent>(&event.content) {
 
+                                        events_sender.unbounded_send(new_peer).map_err(SignalingError::from)?;
                                     }
 
                                 }
                                 RelayMessage::Notice { message: _ } => {
-
-
-
+                                    warn!("{message:?}");
+                                    // Handle the Notice case here
                                 }
                                 RelayMessage::EndOfStoredEvents(_subscription_id ) => {
                                     // Handle the EndOfStoredEvents case here
-
-
-
                                 }
                                 RelayMessage::Ok {
-                                    event_id: _,
-                                    status: _,
-                                    message: _,
+                                    event_id,
+                                    status,
+                                    message,
                                 } => {
-                                    // Handle the Ok case here
+                                    warn!("{event_id:?} {status:?} {message:?}");
+
                                 }
                                 RelayMessage::Auth { challenge: _ } => {
-                                    // Handle the Auth case here
+
                                 }
                                 RelayMessage::Count {
                                     subscription_id: _,
@@ -236,6 +218,7 @@ async fn signaling_loop<S: Signaller>(
                                 }
                             }
                         } else {
+
                             // Handle parsing errors if any
                         }
                     }

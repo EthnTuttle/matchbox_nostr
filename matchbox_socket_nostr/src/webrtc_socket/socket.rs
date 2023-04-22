@@ -8,12 +8,10 @@ use crate::{
 };
 use futures::{future::Fuse, select, Future, FutureExt, StreamExt};
 use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use log::{debug, error, info};
+use log::{debug, error};
 use matchbox_protocol::PeerId;
-use nostr::Keys;
 
 use std::{collections::HashMap, marker::PhantomData, pin::Pin, time::Duration};
-use uuid::Uuid;
 
 /// Configuration options for an ICE server connection.
 /// See also: <https://developer.mozilla.org/en-US/docs/Web/API/RTCIceServer#example>
@@ -612,8 +610,6 @@ async fn run_socket(
 ) -> Result<(), Error> {
     debug!("Starting WebRtcSocket");
 
-    let my_keys: Keys = Keys::generate();
-
     let (requests_sender, requests_receiver) = futures_channel::mpsc::unbounded::<PeerRequest>();
     let (events_sender, events_receiver) = futures_channel::mpsc::unbounded::<PeerEvent>();
 
@@ -622,7 +618,6 @@ async fn run_socket(
         config.room_url,
         requests_receiver,
         events_sender,
-        my_keys,
     );
 
     let channels = MessageLoopChannels {
