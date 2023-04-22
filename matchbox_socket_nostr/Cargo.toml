@@ -1,4 +1,4 @@
-[package]
+  [package]
 name = "matchbox_socket_nostr"
 version = "0.6.2"
 authors = ["Johan Helsing <johanhelsing@gmail.com>",  "stu <stutxo@proton.me>",]
