@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use ggrs::{Message, PlayerType};
 use log::{debug, info};
+use nostr::Keys;
 
 use crate::{
     ChannelConfig, MessageLoopFuture, MultipleChannels, NoChannels, Packet, PeerId, SingleChannel,
@@ -57,8 +58,9 @@ impl WebRtcSocket {
     /// Please use the [`WebRtcSocketBuilder`] to create non-trivial sockets.
     pub fn new_ggrs(
         room_url: impl Into<String>,
+        nostr_keys: Keys,
     ) -> (WebRtcSocket<SingleChannel>, MessageLoopFuture) {
-        WebRtcSocketBuilder::new(room_url)
+        WebRtcSocketBuilder::new(room_url, nostr_keys)
             .add_channel(ChannelConfig::ggrs())
             .build()
     }

@@ -11,6 +11,7 @@ pub use matchbox_socket_nostr;
 use matchbox_socket_nostr::{
     BuildablePlurality, MessageLoopFuture, SingleChannel, WebRtcSocket, WebRtcSocketBuilder,
 };
+use nostr::Keys;
 use std::marker::PhantomData;
 
 /// A [`WebRtcSocket`] as a [`Component`] or [`Resource`].
@@ -149,8 +150,11 @@ impl MatchboxSocket<SingleChannel> {
     /// commands.spawn(socket);
     /// # }
     /// ```
-    pub fn new_unreliable(room_url: impl Into<String>) -> MatchboxSocket<SingleChannel> {
-        Self::from(WebRtcSocket::new_unreliable(room_url))
+    pub fn new_unreliable(
+        room_url: impl Into<String>,
+        nostr_keys: Keys,
+    ) -> MatchboxSocket<SingleChannel> {
+        Self::from(WebRtcSocket::new_unreliable(room_url, nostr_keys))
     }
 
     /// Create a new socket with a single reliable channel
@@ -164,8 +168,11 @@ impl MatchboxSocket<SingleChannel> {
     /// commands.spawn(socket);
     /// # }
     /// ```
-    pub fn new_reliable(room_url: impl Into<String>) -> MatchboxSocket<SingleChannel> {
-        Self::from(WebRtcSocket::new_reliable(room_url))
+    pub fn new_reliable(
+        room_url: impl Into<String>,
+        nostr_keys: Keys,
+    ) -> MatchboxSocket<SingleChannel> {
+        Self::from(WebRtcSocket::new_reliable(room_url, nostr_keys))
     }
 
     /// Create a new socket with a single ggrs-compatible channel
@@ -180,7 +187,10 @@ impl MatchboxSocket<SingleChannel> {
     /// # }
     /// ```
     #[cfg(feature = "ggrs")]
-    pub fn new_ggrs(room_url: impl Into<String>) -> MatchboxSocket<SingleChannel> {
-        Self::from(WebRtcSocket::new_ggrs(room_url))
+    pub fn new_ggrs(
+        room_url: impl Into<String>,
+        nostr_keys: Keys,
+    ) -> MatchboxSocket<SingleChannel> {
+        Self::from(WebRtcSocket::new_ggrs(room_url, nostr_keys))
     }
 }

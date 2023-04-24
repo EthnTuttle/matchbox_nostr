@@ -483,9 +483,9 @@ dependencies = [
 
 [[package]]
 name = "async-tungstenite"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e0388bb7a400072bbb41ceb75d65c3baefb2ea99672fa22e85278452cd9b58b"
+checksum = "b6d2c69d237cf761215175f390021344f5530101cca8164d69878b8a1779e80c"
 dependencies = [
  "async-std",
  "async-tls",
@@ -820,6 +820,7 @@ version = "0.6.1"
 dependencies = [
  "bevy",
  "matchbox_socket_nostr",
+ "nostr",
 ]
 
 [[package]]
@@ -1384,16 +1385,6 @@ checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
 dependencies = [
  "cfg-if",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "console_log"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be8aed40e4edbf4d3b4431ab260b63fdc40f5780a4766824329ea0f1eefe3c0f"
-dependencies = [
- "log",
- "web-sys",
 ]
 
 [[package]]
@@ -3863,21 +3854,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "simple_example"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "console_log",
- "futures",
- "futures-timer",
- "log",
- "matchbox_socket_nostr",
- "tokio",
- "tracing-subscriber",
- "wasm-bindgen-futures",
-]
-
-[[package]]
 name = "slab"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4286,13 +4262,13 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
 name = "tungstenite"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30ee6ab729cd4cf0fd55218530c4522ed30b7b6081752839b68fcec8d0960788"
+checksum = "15fba1a6d6bb030745759a9a2a588bfe8490fc8b4751a277db3a0be1c9ebbf67"
 dependencies = [
- "base64 0.13.1",
  "byteorder",
  "bytes",
+ "data-encoding",
  "http",
  "httparse",
  "log",

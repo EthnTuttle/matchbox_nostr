@@ -2,6 +2,5 @@
 members = [
   "bevy_matchbox_nostr",
   "matchbox_socket_nostr",
-  "examples/*",
 ]
 resolver = "2" # Important! Bevy/WGPU needs this!

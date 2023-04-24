@@ -15,7 +15,7 @@ use futures_util::select;
 use log::{debug, info, warn};
 pub use matchbox_protocol::PeerId;
 
-use nostr::secp256k1::Message;
+use nostr::{secp256k1::Message, Keys};
 
 use messages::*;
 
@@ -61,19 +61,17 @@ async fn signaling_loop<S: Signaller>(
     room_url: String,
     mut requests_receiver: futures_channel::mpsc::UnboundedReceiver<PeerRequest>,
     events_sender: futures_channel::mpsc::UnboundedSender<PeerEvent>,
-    // my_keys: Keys,
+    nostr_keys: Keys,
 ) -> Result<(), SignalingError> {
     use nostr::prelude::*;
 
     let mut signaller = S::new(attempts, &room_url).await?;
     debug!("room {:?}", room_url);
 
-    let key_pair = Keys::generate();
-
-    let pub_key = PeerId(key_pair.public_key());
+    let pub_key = PeerId(nostr_keys.public_key());
     let tag = "matchbox-nostr";
-    let id = uuid::Uuid::new_v4();
 
+    let id = uuid::Uuid::new_v4();
     let subscribe = ClientMessage::new_req(
         SubscriptionId::new(id.to_string()),
         vec![Filter::new().hashtag(tag).since(Timestamp::now())],
@@ -92,21 +90,6 @@ async fn signaling_loop<S: Signaller>(
         .unbounded_send(assign_id)
         .map_err(SignalingError::from)?;
 
-    let new_peer = PeerEvent::NewPeer(pub_key);
-    let new_peer = serde_json::to_string(&new_peer).expect("serializing request");
-
-    let find_game_event = ClientMessage::new_event(
-        EventBuilder::new_text_note(new_peer, &[Tag::Hashtag(tag.to_string())])
-            .to_event(&key_pair)
-            .unwrap(),
-    );
-
-    signaller
-        .send(find_game_event.as_json())
-        .await
-        .map_err(SignalingError::from)?;
-    warn!("BROADCAST PEER ID {:?}", find_game_event);
-
     loop {
         select! {
             request = requests_receiver.next().fuse() => {
@@ -121,9 +104,9 @@ async fn signaling_loop<S: Signaller>(
                 let tags = vec![Tag::PubKey(receiver.0, None ), Tag::Hashtag(tag.to_string())];
 
                 let content =
-                encrypt(&key_pair.secret_key().unwrap(), &receiver.0, request).unwrap();
+                encrypt(&nostr_keys.secret_key().unwrap(), &receiver.0, request).unwrap();
 
-                let id = EventId::new(&key_pair.public_key(), created_at, &kind, &tags, &content);
+                let id = EventId::new(&nostr_keys.public_key(), created_at, &kind, &tags, &content);
 
                 let id_bytes = id.as_bytes();
                 let sig = Message::from_slice(id_bytes).unwrap();
@@ -132,10 +115,10 @@ async fn signaling_loop<S: Signaller>(
                     id,
                     kind,
                     content,
-                    pubkey: key_pair.public_key(),
+                    pubkey: nostr_keys.public_key(),
                     created_at,
                     tags,
-                    sig:  key_pair.sign_schnorr(&sig).unwrap(),
+                    sig:  nostr_keys.sign_schnorr(&sig).unwrap(),
                 };
 
                 // Create a new ClientMessage with the encrypted message
@@ -161,11 +144,11 @@ async fn signaling_loop<S: Signaller>(
                                     subscription_id: _,
                                 } => {
                                     info!("RECEIVED..{event:?}");
-                                    if event.pubkey == key_pair.public_key() {
+                                    if event.pubkey == nostr_keys.public_key() {
                                        //ignore own events
                                     } else if event.kind == Kind::EncryptedDirectMessage {
                                         if let Ok(msg) = decrypt(
-                                            &key_pair.secret_key().unwrap(),
+                                            &nostr_keys.secret_key().unwrap(),
                                             &event.pubkey,
                                             event.content,
                                         ) {
