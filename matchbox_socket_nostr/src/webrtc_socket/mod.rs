@@ -69,7 +69,7 @@ async fn signaling_loop<S: Signaller>(
     debug!("room {:?}", room_url);
 
     let pub_key = PeerId(nostr_keys.public_key());
-    let tag = "matchbox-nostr";
+    let tag = "matchbox-nostr-1";
 
     let id = uuid::Uuid::new_v4();
     let subscribe = ClientMessage::new_req(
@@ -146,6 +146,7 @@ async fn signaling_loop<S: Signaller>(
                                     info!("RECEIVED..{event:?}");
                                     if event.pubkey == nostr_keys.public_key() {
                                        //ignore own events
+                                       info!("WTF????..{event:?}");
                                     } else if event.kind == Kind::EncryptedDirectMessage {
                                         if let Ok(msg) = decrypt(
                                             &nostr_keys.secret_key().unwrap(),
