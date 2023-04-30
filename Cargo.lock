@@ -816,7 +816,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_matchbox_nostr"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "bevy",
  "matchbox_socket_nostr",
@@ -2666,7 +2666,7 @@ dependencies = [
 
 [[package]]
 name = "matchbox_socket_nostr"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "async-compat",
  "async-trait",

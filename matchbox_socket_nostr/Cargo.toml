@@ -1,6 +1,6 @@
   [package]
 name = "matchbox_socket_nostr"
-version = "0.6.3"
+version = "0.6.4"
 authors = ["Johan Helsing <johanhelsing@gmail.com>",  "stu <stutxo@proton.me>",]
 description = "Painless WebRTC peer-to-peer full-mesh networking socket over nostr"
 edition = "2021"

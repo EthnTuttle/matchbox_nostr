@@ -74,7 +74,9 @@ async fn signaling_loop<S: Signaller>(
     let id = uuid::Uuid::new_v4();
     let subscribe = ClientMessage::new_req(
         SubscriptionId::new(id.to_string()),
-        vec![Filter::new().hashtag(tag).since(Timestamp::now())],
+        vec![Filter::new()
+            .kind(Kind::EncryptedDirectMessage)
+            .since(Timestamp::now())],
     );
 
     signaller
@@ -143,11 +145,9 @@ async fn signaling_loop<S: Signaller>(
                                     event,
                                     subscription_id: _,
                                 } => {
-                                    info!("RECEIVED..{event:?}");
                                     if event.pubkey == nostr_keys.public_key() {
-                                       //ignore own events
-                                       info!("WTF????..{event:?}");
                                     } else if event.kind == Kind::EncryptedDirectMessage {
+                                        warn!("RECEIVED..{event:?}");
                                         if let Ok(msg) = decrypt(
                                             &nostr_keys.secret_key().unwrap(),
                                             &event.pubkey,
@@ -165,14 +165,14 @@ async fn signaling_loop<S: Signaller>(
                                                 }
                                                 PeerRequest::KeepAlive => {}
                                              }
-                                        }
-                                        }
-                                    } else if let Ok(new_peer) = serde_json::from_str::<PeerEvent>(&event.content) {
+                                        } else if let Ok(new_peer) = serde_json::from_str::<PeerEvent>(&msg) {
 
-                                        events_sender.unbounded_send(new_peer).map_err(SignalingError::from)?;
+                                            events_sender.unbounded_send(new_peer).map_err(SignalingError::from)?;
+                                        }
+                                        }
                                     }
+                               }
 
-                                }
                                 RelayMessage::Notice { message: _ } => {
                                     warn!("{message:?}");
                                     // Handle the Notice case here
