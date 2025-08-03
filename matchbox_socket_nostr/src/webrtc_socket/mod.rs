@@ -12,10 +12,10 @@ use futures::{future::Either, stream::FuturesUnordered, Future, FutureExt, Strea
 use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_timer::Delay;
 use futures_util::select;
-use log::{debug, info, warn};
+use log::{debug, warn};
 pub use matchbox_protocol::PeerId;
 
-use nostr::{secp256k1::Message, Keys};
+use nostr::Keys;
 
 use messages::*;
 
@@ -64,19 +64,20 @@ async fn signaling_loop<S: Signaller>(
     nostr_keys: Keys,
 ) -> Result<(), SignalingError> {
     use nostr::prelude::*;
+    use nostr::nips::nip04;
 
     let mut signaller = S::new(attempts, &room_url).await?;
     debug!("room {:?}", room_url);
 
-    let pub_key = PeerId(nostr_keys.public_key());
+    let pub_key = PeerId(nostr_keys.public_key().xonly().unwrap());
     let tag = "matchbox-nostr-1";
 
     let id = uuid::Uuid::new_v4();
-    let subscribe = ClientMessage::new_req(
+    let subscribe = ClientMessage::req(
         SubscriptionId::new(id.to_string()),
-        vec![Filter::new()
+        Filter::new()
             .kind(Kind::EncryptedDirectMessage)
-            .since(Timestamp::now())],
+            .since(Timestamp::now())
     );
 
     signaller
@@ -103,28 +104,20 @@ async fn signaling_loop<S: Signaller>(
                 let created_at = Timestamp::now();
                 let kind = Kind::EncryptedDirectMessage;
 
-                let tags = vec![Tag::PubKey(receiver.0, None ), Tag::Hashtag(tag.to_string())];
+                let tags = vec![Tag::public_key(nostr_keys.public_key()), Tag::hashtag(tag)];
 
-                let content =
-                encrypt(&nostr_keys.secret_key().unwrap(), &receiver.0, request).unwrap();
+                let secret_key = nostr_keys.secret_key();
+                let target_pubkey = nostr::PublicKey::from(receiver.0);
+                let content = nip04::encrypt(secret_key, &target_pubkey, &request).unwrap();
 
-                let id = EventId::new(&nostr_keys.public_key(), created_at, &kind, &tags, &content);
-
-                let id_bytes = id.as_bytes();
-                let sig = Message::from_slice(id_bytes).unwrap();
-
-                let event = Event {
-                    id,
-                    kind,
-                    content,
-                    pubkey: nostr_keys.public_key(),
-                    created_at,
-                    tags,
-                    sig:  nostr_keys.sign_schnorr(&sig).unwrap(),
-                };
+                let event = EventBuilder::new(kind, content)
+                    .tags(tags)
+                    .custom_created_at(created_at)
+                    .sign_with_keys(&nostr_keys)
+                    .map_err(|_| SignalingError::UnknownFormat)?;
 
                 // Create a new ClientMessage with the encrypted message
-                let msg = ClientMessage::new_event(event);
+                let msg = ClientMessage::event(event);
 
                 // Log the message being sent
                 warn!("SENDING...{msg:?}");
@@ -148,32 +141,28 @@ async fn signaling_loop<S: Signaller>(
                                     if event.pubkey == nostr_keys.public_key() {
                                     } else if event.kind == Kind::EncryptedDirectMessage {
                                         warn!("RECEIVED..{event:?}");
-                                        if let Ok(msg) = decrypt(
-                                            &nostr_keys.secret_key().unwrap(),
-                                            &event.pubkey,
-                                            event.content,
-                                        ) {
-                                        let peer_key = event.pubkey;
-                                        if let Ok(event) = serde_json::from_str::<PeerRequest>(&msg) {
-                                            match event {
-                                                PeerRequest::Signal{receiver: _, data } => {
-                                                    let event = PeerEvent::Signal {
-                                                        sender: PeerId(peer_key),
-                                                        data,
+                                        let secret_key = nostr_keys.secret_key();
+                                        if let Ok(msg) = nip04::decrypt(secret_key, &event.pubkey, &event.content) {
+                                            let peer_key = event.pubkey;
+                                            if let Ok(event) = serde_json::from_str::<PeerRequest>(&msg) {
+                                                match event {
+                                                    PeerRequest::Signal{receiver: _, data } => {
+                                                        let event = PeerEvent::Signal {
+                                                            sender: PeerId(peer_key.xonly().unwrap()),
+                                                            data,
                                                         };
-                                                    events_sender.unbounded_send(event).map_err(SignalingError::from)?;
+                                                        events_sender.unbounded_send(event).map_err(SignalingError::from)?;
+                                                    }
+                                                    PeerRequest::KeepAlive => {}
                                                 }
-                                                PeerRequest::KeepAlive => {}
-                                             }
-                                        } else if let Ok(new_peer) = serde_json::from_str::<PeerEvent>(&msg) {
-
-                                            events_sender.unbounded_send(new_peer).map_err(SignalingError::from)?;
-                                        }
+                                            } else if let Ok(new_peer) = serde_json::from_str::<PeerEvent>(&msg) {
+                                                events_sender.unbounded_send(new_peer).map_err(SignalingError::from)?;
+                                            }
                                         }
                                     }
                                }
 
-                                RelayMessage::Notice { message: _ } => {
+                                RelayMessage::Notice(_) => {
                                     warn!("{message:?}");
                                     // Handle the Notice case here
                                 }
@@ -197,8 +186,23 @@ async fn signaling_loop<S: Signaller>(
                                 } => {
                                     // Handle the Count case here
                                 }
-                                RelayMessage::Empty => {
-                                    // Handle the Empty case here
+                                RelayMessage::Closed {
+                                    subscription_id: _,
+                                    message: _,
+                                } => {
+                                    // Handle the Closed case here
+                                }
+                                RelayMessage::NegMsg {
+                                    subscription_id: _,
+                                    message: _,
+                                } => {
+                                    // Handle the NegMsg case here
+                                }
+                                RelayMessage::NegErr {
+                                    subscription_id: _,
+                                    message: _,
+                                } => {
+                                    // Handle the NegErr case here
                                 }
                             }
                         } else {

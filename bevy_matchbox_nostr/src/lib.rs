@@ -3,8 +3,7 @@
 #![forbid(unsafe_code)]
 
 use bevy::{
-    ecs::system::Command,
-    prelude::{Commands, Component, Deref, DerefMut, Resource, World},
+    prelude::{Command, Commands, Component, Deref, DerefMut, Resource, World},
     tasks::IoTaskPool,
 };
 pub use matchbox_socket_nostr;
@@ -91,7 +90,7 @@ impl<C: BuildablePlurality> From<(WebRtcSocket<C>, MessageLoopFuture)> for Match
 struct OpenSocket<C: BuildablePlurality>(WebRtcSocketBuilder<C>);
 
 impl<C: BuildablePlurality + 'static> Command for OpenSocket<C> {
-    fn write(self, world: &mut World) {
+    fn apply(self, world: &mut World) {
         world.insert_resource(MatchboxSocket::from(self.0));
     }
 }
@@ -104,7 +103,7 @@ pub trait OpenSocketExt<C: BuildablePlurality> {
 
 impl<'w, 's, C: BuildablePlurality + 'static> OpenSocketExt<C> for Commands<'w, 's> {
     fn open_socket(&mut self, socket_builder: WebRtcSocketBuilder<C>) {
-        self.add(OpenSocket(socket_builder))
+        self.queue(OpenSocket(socket_builder))
     }
 }
 
@@ -112,7 +111,7 @@ impl<'w, 's, C: BuildablePlurality + 'static> OpenSocketExt<C> for Commands<'w, 
 struct CloseSocket<C: BuildablePlurality>(PhantomData<C>);
 
 impl<C: BuildablePlurality + 'static> Command for CloseSocket<C> {
-    fn write(self, world: &mut World) {
+    fn apply(self, world: &mut World) {
         world.remove_resource::<MatchboxSocket<C>>();
     }
 }
@@ -125,7 +124,7 @@ pub trait CloseSocketExt {
 
 impl<'w, 's> CloseSocketExt for Commands<'w, 's> {
     fn close_socket<C: BuildablePlurality + 'static>(&mut self) {
-        self.add(CloseSocket::<C>(PhantomData::default()))
+        self.queue(CloseSocket::<C>(PhantomData::default()))
     }
 }
 
